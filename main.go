@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+
 	"github.com/Kong/go-pdk"
 	"github.com/Kong/go-pdk/server"
 )
@@ -20,12 +22,12 @@ func New() interface{} {
 
 func (conf *Config) Access(kong *pdk.PDK) {
 	if conf.PartnerValue == "" {
-		exit(kong, 500, "Invalid plugin configuration")
+		exit(kong, http.StatusInternalServerError, "Invalid plugin configuration")
 		return
 	}
 
 	if err := kong.ServiceRequest.SetHeader("Partner", conf.PartnerValue); err != nil {
-		exit(kong, 500, "Internal server error")
+		exit(kong, http.StatusInternalServerError, "Internal server error")
 	}
 }
 
