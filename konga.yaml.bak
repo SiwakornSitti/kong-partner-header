@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: konga-deployment
+  labels:
+    app: konga
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: konga
+  template:
+    metadata:
+      labels:
+        app: konga
+    spec:
+
+      containers:
+        - name: konga
+          image: pantsel/konga:latest
+          ports:
+            - containerPort: 1337
+              name: http
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: DB_ADAPTER
+              value: "postgres"
+            - name: DB_HOST
+              value: "tungngern-core-uat-pqsql-gw.tungngern-core.nonprod.gcp.external"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: "kong"
+            - name: DB_PASSWORD
+              value: "<db-password>"
+            - name: DB_DATABASE
+              value: "gateway-external-web-admin-kong"
+            - name: DB_SSL
+              value: "true"
+            - name: DB_PG_SSL
+              value: "true"
+            - name: KONGA_DEFAULT_HOST
+              value: "0.0.0.0"        
+            - name: NO_AUTH
+              value: "true"
+
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 1337
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 1337
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: konga
+  labels:
+    app: konga
+spec:
+  type: ClusterIP
+  selector:
+    app: konga
+  ports:
+    - name: http
+      port: 1337
+      targetPort: 1337
