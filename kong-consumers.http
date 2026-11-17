@@ -1,0 +1,284 @@
+### Variables
+@baseUrl = http://localhost:8001
+@consumer = PTT
+@customId = PTT
+
+### 0. List all routes (find route names & paths)
+GET {{baseUrl}}/routes
+Accept: application/json
+
+### 1. List all consumers
+GET {{baseUrl}}/consumers
+Accept: application/json
+
+### 2. Create a new consumer with custom_id
+POST {{baseUrl}}/consumers
+Content-Type: application/json
+
+{
+  "username": "{{consumer}}",
+  "custom_id": "{{customId}}",
+  "tags": ["partner", "header-auth"]
+}
+
+### 3. Get consumer by username or ID
+GET {{baseUrl}}/consumers/{{consumer}}
+Accept: application/json
+
+### 4. Filter / Find consumer by custom_id
+GET {{baseUrl}}/consumers?custom_id={{customId}}
+Accept: application/json
+
+### 5. Update custom_id on an existing consumer
+PATCH {{baseUrl}}/consumers/{{consumer}}
+Content-Type: application/json
+
+{
+  "custom_id": "PARTNER_ID_UPDATED_999"
+}
+
+### 6. Upsert consumer (Create or Update by username)
+PUT {{baseUrl}}/consumers/{{consumer}}
+Content-Type: application/json
+
+{
+  "custom_id": "{{customId}}"
+}
+
+### 7. Delete consumer
+DELETE {{baseUrl}}/consumers/{{consumer}}
+Accept: application/json
+
+
+# ==============================================================================
+# CREDENTIALS SETUP (Depends on the auth plugin enabled on your Service/Route)
+# ==============================================================================
+
+### 8. Set API Key (key-auth)
+POST {{baseUrl}}/consumers/{{consumer}}/key-auth
+Content-Type: application/json
+
+{
+  "key": "PTT_API_KEY"
+}
+
+### 9. List API Keys for a consumer
+GET {{baseUrl}}/consumers/{{consumer}}/key-auth
+Accept: application/json
+
+### 10. Set Basic Auth credential (basic-auth)
+POST {{baseUrl}}/consumers/{{consumer}}/basic-auth
+Content-Type: application/json
+
+{
+  "username": "partner_user",
+  "password": "partner_secure_password"
+}
+
+### 11. Set HMAC credential (hmac-auth)
+POST {{baseUrl}}/consumers/{{consumer}}/hmac-auth
+Content-Type: application/json
+
+{
+  "username": "partner_hmac_user",
+  "secret": "partner_hmac_secret_key"
+}
+
+### 12. Set JWT credential (jwt)
+POST {{baseUrl}}/consumers/{{consumer}}/jwt
+Content-Type: application/json
+
+{
+  "key": "partner-jwt-issuer",
+  "secret": "partner-jwt-secret"
+}
+
+
+# ==============================================================================
+# BIND CONSUMER TO A ROUTE (Access Control Lists - ACL)
+# ==============================================================================
+
+@routeName = partner-route
+@aclGroup = ptt-group
+
+### 13. Step 1: Add consumer to an ACL group
+POST {{baseUrl}}/consumers/{{consumer}}/acls
+Content-Type: application/json
+
+{
+  "group": "{{aclGroup}}"
+}
+
+### 14. Step 2: Enable key-auth on the Route (if not already enabled)
+POST {{baseUrl}}/routes/{{routeName}}/plugins
+Content-Type: application/json
+
+{
+  "name": "key-auth"
+}
+
+### 15. Step 3: Restrict Route to ONLY this ACL group
+POST {{baseUrl}}/routes/{{routeName}}/plugins
+Content-Type: application/json
+
+{
+  "name": "acl",
+  "config": {
+    "allow": ["{{aclGroup}}"]
+  }
+}
+
+### 16. List ACL groups assigned to consumer
+GET {{baseUrl}}/consumers/{{consumer}}/acls
+Accept: application/json
+
+
+# ==============================================================================
+# PEP PETRO ROUTES BINDING (POST /transactions, POST /status, PATCH /cancel)
+# ==============================================================================
+
+@serviceName = pep-service
+@petroRouteCombined = pep-petro-partner-routes
+@routeTransactions = pep-transactions
+@routeStatus = pep-tx-status
+@routeCancel = pep-tx-cancel
+
+### 17. Ensure consumer {{consumer}} has ACL group 'ptt-group'
+POST {{baseUrl}}/consumers/{{consumer}}/acls
+Content-Type: application/json
+
+{
+  "group": "ptt-group"
+}
+
+# ------------------------------------------------------------------------------
+# APPROACH A: Single Combined Route for all 3 endpoints (Recommended / Cleanest)
+# ------------------------------------------------------------------------------
+
+### 18. Create/Update Combined Route covering all 3 paths & methods
+PUT {{baseUrl}}/routes/{{petroRouteCombined}}
+Content-Type: application/json
+
+{
+  "name": "{{petroRouteCombined}}",
+  "paths": [
+    "/pep/petro/api/v1/transactions",
+    "/pep/petro/api/v1/partner/transaction/status",
+    "/pep/petro/api/v1/partner/transaction/cancel"
+  ],
+  "methods": ["POST", "PATCH"],
+  "strip_path": false
+}
+
+### 19. Enable key-auth on Combined Route
+POST {{baseUrl}}/routes/{{petroRouteCombined}}/plugins
+Content-Type: application/json
+
+{
+  "name": "key-auth"
+}
+
+### 20. Restrict Combined Route ONLY to 'ptt-group'
+POST {{baseUrl}}/routes/{{petroRouteCombined}}/plugins
+Content-Type: application/json
+
+{
+  "name": "acl",
+  "config": {
+    "allow": ["ptt-group"]
+  }
+}
+
+# ------------------------------------------------------------------------------
+# APPROACH B: 3 Separate Distinct Routes (Strict Method Matching per Path)
+# ------------------------------------------------------------------------------
+
+### 21. Create Route 1: POST /pep/petro/api/v1/transactions
+PUT {{baseUrl}}/routes/{{routeTransactions}}
+Content-Type: application/json
+
+{
+  "name": "{{routeTransactions}}",
+  "paths": ["/pep/petro/api/v1/transactions"],
+  "methods": ["POST"],
+  "strip_path": false
+}
+
+### 22. Bind key-auth & ACL to Route 1
+POST {{baseUrl}}/routes/{{routeTransactions}}/plugins
+Content-Type: application/json
+
+{
+  "name": "key-auth"
+}
+
+###
+POST {{baseUrl}}/routes/{{routeTransactions}}/plugins
+Content-Type: application/json
+
+{
+  "name": "acl",
+  "config": {
+    "allow": ["ptt-group"]
+  }
+}
+
+### 23. Create Route 2: POST /pep/petro/api/v1/partner/transaction/status
+PUT {{baseUrl}}/routes/{{routeStatus}}
+Content-Type: application/json
+
+{
+  "name": "{{routeStatus}}",
+  "paths": ["/pep/petro/api/v1/partner/transaction/status"],
+  "methods": ["POST"],
+  "strip_path": false
+}
+
+### 24. Bind key-auth & ACL to Route 2
+POST {{baseUrl}}/routes/{{routeStatus}}/plugins
+Content-Type: application/json
+
+{
+  "name": "key-auth"
+}
+
+###
+POST {{baseUrl}}/routes/{{routeStatus}}/plugins
+Content-Type: application/json
+
+{
+  "name": "acl",
+  "config": {
+    "allow": ["ptt-group"]
+  }
+}
+
+### 25. Create Route 3: PATCH /pep/petro/api/v1/partner/transaction/cancel
+PUT {{baseUrl}}/routes/{{routeCancel}}
+Content-Type: application/json
+
+{
+  "name": "{{routeCancel}}",
+  "paths": ["/pep/petro/api/v1/partner/transaction/cancel"],
+  "methods": ["PATCH"],
+  "strip_path": false
+}
+
+### 26. Bind key-auth & ACL to Route 3
+POST {{baseUrl}}/routes/{{routeCancel}}/plugins
+Content-Type: application/json
+
+{
+  "name": "key-auth"
+}
+
+###
+POST {{baseUrl}}/routes/{{routeCancel}}/plugins
+Content-Type: application/json
+
+{
+  "name": "acl",
+  "config": {
+    "allow": ["ptt-group"]
+  }
+}
